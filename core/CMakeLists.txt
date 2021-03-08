@@ -13,13 +13,17 @@ add_library(${BRUFIT} SHARED  Weights.cpp FiledTree.cpp RooHSComplex.cpp RooHSEv
 
 
 
-target_link_libraries(${BRUFIT} ${ROOT_LIBRARIES})
+if( ${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+  target_link_libraries(${BRUFIT} ${ROOT_LIBRARIES} "-undefined dynamic_lookup")
+else()
+  target_link_libraries(${BRUFIT} ${ROOT_LIBRARIES} )
+endif()
 
 
-install(TARGETS ${BRUFIT} 
+install(TARGETS ${BRUFIT}
   LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}")
 
 FILE(GLOB ROOT_BRUFIT_PCM ${CMAKE_CURRENT_BINARY_DIR}/*pcm ${CMAKE_CURRENT_BINARY_DIR}/${DIRNAME}/*pcm)
 
-install (FILES  ${ROOT_BRUFIT_PCM}    
+install (FILES  ${ROOT_BRUFIT_PCM}
   DESTINATION "${CMAKE_INSTALL_LIBDIR}")
