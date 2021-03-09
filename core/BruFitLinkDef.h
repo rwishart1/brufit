@@ -55,6 +55,7 @@
 #pragma link C++ class HS::FIT::CrossSection+;
 #pragma link C++ class HS::FIT::Weights+;
 #pragma link C++ class HS::FIT::WeightsConfig+;
+#pragma link C++ class HS::FIT::WignerGen+;
 //#pragma link C++ class HS::FIT::+;
 
 
