@@ -18,16 +18,17 @@ namespace HS{
 
     
     RooMcmc::~RooMcmc(){
-      //if(fTreeMCMC)delete fTreeMCMC;
-      //  delete fChainData;
-      // delete fModelConfig;
+      if(!_formBranches.empty()){
+	for(auto br:_formBranches)
+	  delete br;
+      }
     }
     
     void RooMcmc::Run(Setup &setup,RooAbsData &fitdata){
       //initialise MCMCCalculator
       fSetup=&setup;
       fData=&fitdata;
-      
+      cout<<"RooMcmc::Run"<<endl;
       SetModel(fSetup->GetModelConfig());
       SetupBasicUsage();
 
@@ -38,10 +39,11 @@ namespace HS{
     ///////////////////////////////////////////
     void RooMcmc::MakeChain()
     {
-      cout<<"HSMCMC::MakeChain()"<<endl;
+      cout<<"HSMCMC::MakeChain() "<<fData<<" "<<fPdf<<" "<<fPOI.getSize()<<endl;
       if (!fData || !fPdf   ) return;
       if (fPOI.getSize() == 0) return;
-
+     std::cout<<"proceed"<<endl;
+ 
    
       // if a proposal function has not been specified create a default one
       bool useDefaultPropFunc = (fPropFunc == nullptr);
@@ -76,7 +78,7 @@ namespace HS{
     
       fParams = nll->getParameters(*fData);
       RemoveConstantParameters(fParams);
-    
+      std::cout<<"metropolis"<<endl;
       HSMetropolisHastings mh;
       if(fKeepStart) mh.SetKeepStart();
       mh.SetFunction(*nll);
@@ -113,55 +115,54 @@ namespace HS{
     }
     ////////////////////////////////////////////////////////
 
-    TMatrixDSym RooMcmc::MakeMcmcCovarianceMatrix(TTree* tree){
+    TMatrixDSym RooMcmc::MakeMcmcCovarianceMatrix(TTree* tree,size_t burnin){
           
-     auto pars = fSetup->ParsAndYields();
-     Int_t Npars = pars.size();
-     Int_t Nentries = tree->GetEntries()-fNumBurnInStepsCov;
-     Int_t param_index=0;     
-     vector<Double_t> params(Npars);
-     int pindex=0;
-     Double_t data[Npars];
-     //Int_t NburnC = fNumBurnInStepsCov;
+      auto pars = fSetup->ParsAndYields();
+      Int_t Npars = pars.size();
+      Int_t Nentries = tree->GetEntries()-burnin;
+      Int_t param_index=0;     
+      vector<Double_t> params(Npars);
+      int pindex=0;
+      Double_t data[Npars];
+      //Int_t NburnC = fNumBurnInStepsCov;
   
      
-     //Loop over parameters of the model and set values from the tree
-     //Needed for RobustEstimator
-     //Only needed once
-     for(RooAbsArg* ipar : pars)
-       {
-	 tree->SetBranchAddress(ipar->GetName(), &params[pindex++]); 
-       }
+      //Loop over parameters of the model and set values from the tree
+      //Needed for RobustEstimator
+      //Only needed once
+      for(RooAbsArg* ipar : pars)
+	{
+	  tree->SetBranchAddress(ipar->GetName(), &params[pindex++]); 
+	}
      
-     //Create instance of TRobustEstimator
-     TRobustEstimator r(Nentries,Npars);
+      //Create instance of TRobustEstimator
+      TRobustEstimator r(Nentries,Npars);
 
-     //Loop over entries of the tree to 'AddRow' of data to RobustEstimator
-	for (int ientry = 0; ientry<Nentries; ientry++)
-	  {//Loop over entries of the tree
-	    tree->GetEntry(ientry);
-	    
-	    for (int param_index = 0; param_index<Npars; param_index++)
-	      { //Loop over parameters of the model
-		//And set 'data' element
-		data[param_index]=params[param_index];
-	      }
-
-	    r.AddRow(data);//Appends data to RE
+      //Loop over entries of the tree to 'AddRow' of data to RobustEstimator
+      // for (int ientry = 0; ientry<Nentries; ientry++)
+      for (int ientry = burnin; ientry<Nentries+burnin; ientry++)
+	{//Loop over entries of the tree
+	  tree->GetEntry(ientry);
+	 
+	  for (int param_index = 0; param_index<Npars; param_index++)
+	    { //Loop over parameters of the model
+	      //And set 'data' element
+	      data[param_index]=params[param_index];
 	    }
-
-	r.Evaluate(); //Necessary to calculate RE properly
-	const TMatrixDSym* covMatSym;
-	covMatSym = r.GetCovariance();
-	covMatSym->Print();
-	//covMatSym is the symmetric covariance matrix to be used in the proposal function
-
-	TMatrixDSym covMatSymNorm=*covMatSym;
-	fNorm = 1./fNorm;
-	covMatSymNorm*= fNorm;
-    
-	tree->ResetBranchAddresses();
-	return covMatSymNorm;
+	 
+	  r.AddRow(data);//Appends data to RE
+	}
+     
+      r.Evaluate(); //Necessary to calculate RE properly
+      const TMatrixDSym* covMatSym;
+      covMatSym = r.GetCovariance();
+      covMatSym->Print();
+      //covMatSym is the symmetric covariance matrix to be used in the proposal function
+     
+      TMatrixDSym covMatSymNorm=*covMatSym;
+     
+      tree->ResetBranchAddresses();
+      return covMatSymNorm;
     }
 
     /////////////////////////////////////////////////////////
@@ -215,46 +216,55 @@ namespace HS{
      
     }
     void RooMcmc::AddFormulaToMCMCTree(){
+      //avoid future memory leaks/crashes...
+      fTreeMCMC->ResetBranchAddresses();
 
-      auto formulas=fSetup->Formulas();
+
+      auto formulas=fSetup->ParameterFormulas(); //formulas that just depend on parameters, not variables/observables
       if(!formulas.getSize()) return;
-      vector<Double_t> formVals(formulas.getSize());
-      vector<TBranch*> formBranches(formulas.getSize());
+
+      _formVals.reserve(formulas.getSize());
+      _formBranches.reserve(formulas.getSize());
+
       TIter iter=formulas.createIterator();
       Int_t iform=0;
+
+      //getLeaves before extra branches
+      auto parLeaves=fTreeMCMC->GetListOfLeaves();
+      
       while(auto* formu=dynamic_cast<RooFormulaVar*>(iter())){
 	TString formuName=formu->GetName();
-	
-	formBranches[iform]=fTreeMCMC->Branch(formuName,&formVals[iform],formuName+"/D");
+	_formVals[iform]=0;
+	_formBranches[iform]=nullptr;
+	_formBranches[iform]=fTreeMCMC->Branch(formuName,&_formVals[iform],formuName+"/D");
 	iform++;
       }
 
       Long64_t Nmcmc=fTreeMCMC->GetEntries();
-      Int_t Nleaf=fTreeMCMC->GetListOfLeaves()->GetEntries();
-      // auto snapshot=fParams->snapshot();
+      Int_t Nleaf=parLeaves->GetEntries();
+ 
       for(Int_t entry=0;entry<Nmcmc;entry++){
 	
 	fTreeMCMC->GetEntry(entry);
-	
+ 
+	//Set value of parameters to value in tree for this event
 	for(Int_t ibr=0;ibr<Nleaf;ibr++){
-	  auto *leaf=dynamic_cast<TLeaf*>(fTreeMCMC->GetListOfLeaves()->At(ibr));
+	  auto *leaf=dynamic_cast<TLeaf*>(parLeaves->At(ibr));	
 	  auto* brVar=dynamic_cast<RooRealVar*>(fParams->find(leaf->GetName()));
-	  if(brVar) brVar->setVal(leaf->GetValue());
+	  if(brVar!=nullptr) brVar->setVal(leaf->GetValue());
 	    
 	}
-	  
-	
+	//now calculate value of formula for these parameters
 	iter.Reset();
 	iform=0;
 	while(auto* formu=dynamic_cast<RooFormulaVar*>(iter())){
 	  
-	  formVals[iform]=formu->getValV();
-	  formBranches[iform]->Fill();
+	  _formVals[iform]=formu->getValV();
+	  _formBranches[iform]->Fill();
 	  iform++;
 
 	}
       }  
-      // fParams=dynamic_cast<RooArgSet*>(snapshot); //set parameter values back to orignal
     }
     ///////////////////////////////////////////////
     Double_t  RooMcmc::SumWeights(){
@@ -288,6 +298,7 @@ namespace HS{
     }
     //FRom MCMCCalculator
     void RooMcmc::SetModel( ModelConfig*  model) {
+      cout<<"RooMcmc::SetModel"<<endl;
       // set the model
       fModelConfig=model;
       //fPdf = fModelConfig->GetPdf();
@@ -337,6 +348,7 @@ namespace HS{
       saveDS.Write();
       TTree* treeDS=RooStats::GetAsTTree(ResultTreeName(),ResultTreeName(),saveDS);
       treeDS->Write();
+      delete treeDS;treeDS=nullptr;
 
       return std::move(file);
     }
@@ -345,19 +357,17 @@ namespace HS{
     
    void RooMcmcSeq::Run(Setup &setup,RooAbsData &fitdata){
      fSetup=&setup;
-     fData=&fitdata;
-   //initialise MCMCCalculator
-     SetData(fitdata);
-     SetModel(setup.GetModelConfig());
-     SetupBasicUsage();
-     //cout<<"Paramters of interest "<<endl;
-     // fPOI.Print("v");
+    fData=&fitdata;
+    //initialise MCMCCalculator
+    SetData(fitdata);
+    SetModel(setup.GetModelConfig());
+    SetupBasicUsage();
      
-     RooStats::SequentialProposal sp(fNorm);
-     SetProposalFunction(sp);
-     fKeepStart=kTRUE; //start values from previous
-     MakeChain();
-      
+    RooStats::SequentialProposal sp(fNorm);
+    SetProposalFunction(sp);
+    fKeepStart=kTRUE; //start values from previous
+    MakeChain();
+    
    }
 
     //////////////////////////////////////////////////
@@ -387,13 +397,18 @@ namespace HS{
       auto tree=dynamic_cast<TTree*>(file->Get("MCMCTree"));
  
       
-      TMatrixDSym covMat =  MakeMcmcCovarianceMatrix(tree);
+      TMatrixDSym covMat =  MakeMcmcCovarianceMatrix(tree,fNumBurnInStepsForCov);
       delete file; //Must be at end of func
 
+      //scale covariance matrix by Norm
+      
+      auto divideNorm = 1./fNorm;
+      covMat*= divideNorm;
+ 
       ProposalHelper ph;
       ph.SetVariables(fSetup->ParsAndYields());
       ph.SetUpdateProposalParameters(true); // auto-create mean vars and add mappings
-      ph.SetCacheSize(100);
+      ph.SetCacheSize(1);
       ph.SetCovMatrix(covMat);
       ProposalFunction* pf = ph.GetProposalFunction();
       SetProposalFunction(*pf);
@@ -423,16 +438,23 @@ namespace HS{
 4.Uses the cov mat to generate new prop func and run
       */
 
-      RooStats::SequentialProposal sp(fNormThenCov);
+      RooStats::SequentialProposal sp(fNorm);
       SetProposalFunction(sp);
       fKeepStart=kTRUE; //start values from previous
       MakeChain();
 
-      TMatrixDSym covMat =  MakeMcmcCovarianceMatrix(fTreeMCMC);
-
       auto saveN = fNumIters;
       fNumIters = fNumItersThenCov;
-      
+      auto saveNorm=fNorm;
+      fNorm=fNormThenCov;
+      auto saveBurn=fNumBurnInSteps;
+      fNumBurnInSteps=fNumBurnInStepsThenCov;
+
+      TMatrixDSym covMat =  MakeMcmcCovarianceMatrix(fTreeMCMC,fNumBurnInSteps);
+      auto divideNorm = 1./fNorm;
+      covMat*= divideNorm;
+ 
+        
       ProposalHelper ph;
       ph.SetVariables(fSetup->ParsAndYields());
       ph.SetUpdateProposalParameters(true); // auto-create mean vars and add mappings
@@ -449,7 +471,8 @@ namespace HS{
       MakeChain();
       
       fNumIters = saveN; //switch back to seq Niters for next bin
-
+      fNorm=saveNorm;
+      fNumBurnInSteps=saveBurn;
     }
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////
     
@@ -508,3 +531,8 @@ namespace HS{
   }
 }
 
+<<<<<<< HEAD
+=======
+
+    
+>>>>>>> upstream/genBranches
