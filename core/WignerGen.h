@@ -21,8 +21,8 @@ namespace HS{
 	WignerGen& operator=(const WignerGen& other)=default;
 	WignerGen& operator=(WignerGen&& other)=default; 
       */
-    WignerGen(int lmax, double ang):p(TMath::Sin(ang/2)), q(TMath::Cos(ang/2)), sqt(2*lmax+1),
-	d(lmax+1,2*lmax+1), n(-1){};
+      WignerGen(int lmax, double ang)/*:p(TMath::Sin(ang/2)), q(TMath::Cos(ang/2)), sqt(2*lmax+1),
+				       d(lmax+1,2*lmax+1), n(-1){}*/;
       
       arr2<double> &recurse ();
       
