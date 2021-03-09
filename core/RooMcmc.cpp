@@ -531,8 +531,3 @@ namespace HS{
   }
 }
 
-<<<<<<< HEAD
-=======
-
-    
->>>>>>> upstream/genBranches
