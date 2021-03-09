@@ -26,8 +26,8 @@ void WignerGen::do_line0 (double *l1, int j)
    l2[0] = sqt[j] * (t3*l1[0]+t1*l2[0]);
    }
  
-    WignerGen::WignerGen(int lmax, double ang)/*:p(TMath::Sin(ang/2)), q(TMath::Cos(ang/2)), sqt(2*lmax+1),
-				     d(lmax+1,2*lmax+1), n(-1)*/
+    WignerGen::WignerGen(int lmax, double ang):p(TMath::Sin(ang/2)), q(TMath::Cos(ang/2)), sqt(2*lmax+1),
+				     d(lmax+1,2*lmax+1), n(-1)
     { for (tsize m=0; m<sqt.size(); ++m) sqt[m] = TMath::Sqrt(double(m)); }
 
 
