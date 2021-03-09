@@ -25,12 +25,15 @@ namespace HS{
 				       d(lmax+1,2*lmax+1), n(-1){}*/;
       
       arr2<double> &recurse ();
-      
+      //std::vector<std::vector<double>> &recurse ();
+
     private:
 
       double p,q;
       arr<double> sqt;
       arr2<double> d;
+      //std::vector<double> sqt;
+      //std::vector<std::vector<double>> d;
       int n;
       
       void do_line0 (double *l1, int j);

@@ -31,7 +31,8 @@ void WignerGen::do_line0 (double *l1, int j)
     { for (tsize m=0; m<sqt.size(); ++m) sqt[m] = TMath::Sqrt(double(m)); }
 
 
- arr2<double> &WignerGen::recurse ()
+     arr2<double> &WignerGen::recurse ()
+     // std::vector<std::vector<double>> &WignerGen::recurse ()
    {
    ++n;
    if (n==0)
