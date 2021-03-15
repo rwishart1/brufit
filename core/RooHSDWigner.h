@@ -13,12 +13,12 @@ namespace FIT{
 
 class RooHSDWigner : public RooHSComplex {
 
-public:
-RooHSDWigner()=default;
-RooHSDWigner(const char *name, const char *title, RooAbsReal& theta, RooAbsReal& phi, int l, int m=0,int s=0, double factor=1);
-RooHSDWigner(const RooHSDWigner& other, const char* name=nullptr);
-//TObject* clone(const char* newname) const overrride{ return new RooHSDWigner(*this, newname);}
-~RooHSDWigner() override=default;
+ public:
+  RooHSDWigner()=default;
+  RooHSDWigner(const char *name, const char *title, RooAbsReal& theta, RooAbsReal& phi, int l, int m=0,int s=0, double factor=1);
+  RooHSDWigner(const RooHSDWigner& other, const char* name=nullptr);
+  //  TObject* clone(const char* newname) const overrride{ return new RooHSDWigner(*this, newname);}
+  ~RooHSDWigner() override=default;
 
 
 TString FactoryReal() const final{
